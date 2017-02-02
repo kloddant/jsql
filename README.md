@@ -19,12 +19,12 @@ A javascript, client-only MySQL database-equivalent framework for working with d
 
 ##UPDATE
 
-    exampledatabase.update({"id":"2", "name":"Tony"}, 'exampletable', 'id == 1');
+    exampledatabase.update({"id":"2", "name":"Tony"}, 'exampletable', '`id` == 1');
 
 ##DELETE
 
-    exampledatabase.delete('exampletable', 'id == 1');
+    exampledatabase.delete('exampletable', '`id` == 1');
 
 ##SELECT
 
-    exampledatabase.select(["id"], 'exampletable', 'id == 1');
+    exampledatabase.select(["id"], 'exampletable', '`id` == 1');
