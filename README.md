@@ -28,3 +28,7 @@ A javascript, client-only MySQL database-equivalent framework for working with d
 ##SELECT
 
     exampledatabase.select(["id"], 'exampletable', '`id` == 1');
+    
+##WHERE LIKE
+
+    exampledatabase.select(["id"], 'exampletable', '`id`.indexOf(1) > -1');
