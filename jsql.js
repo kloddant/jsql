@@ -58,7 +58,7 @@ class Table {
 			var condition = where;
 			var keys = Object.keys(this.data[i]);
 			keys.forEach(function(key) {
-				condition = condition.replace(key, "this.data[i]['"+key+"']");
+				condition = condition.replace(" "+key+" ", " this.data[i]['"+key+"'] ");
 			});
 			if (eval(condition)) {
 				Object.assign(this.data[i], fields);
@@ -72,7 +72,7 @@ class Table {
 			var condition = where;
 			var keys = Object.keys(this.data[i]);
 			keys.forEach(function(key) {
-				condition = condition.replace(key, "this.data[i]['"+key+"']");
+				condition = condition.replace(" "+key+" ", " this.data[i]['"+key+"'] ");
 			});
 			if (eval(condition)) {
 				this.data.splice(i, 1);
@@ -87,7 +87,7 @@ class Table {
 			var condition = where;
 			var keys = Object.keys(this.data[i]);
 			keys.forEach(function(key) {
-				condition = condition.replace(key, "this.data[i]['"+key+"']");
+				condition = condition.replace(" "+key+" ", " this.data[i]['"+key+"'] ");
 			});
 			if (eval(condition)) {
 				var result = {};
