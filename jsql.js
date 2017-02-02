@@ -58,7 +58,7 @@ class Table {
 			var condition = where;
 			var keys = Object.keys(this.data[i]);
 			keys.forEach(function(key) {
-				condition = condition.replace(" "+key+" ", " this.data[i]['"+key+"'] ");
+				condition = condition.replace("`"+key+"`", "this.data[i]['"+key+"']");
 			});
 			if (eval(condition)) {
 				Object.assign(this.data[i], fields);
@@ -72,7 +72,7 @@ class Table {
 			var condition = where;
 			var keys = Object.keys(this.data[i]);
 			keys.forEach(function(key) {
-				condition = condition.replace(" "+key+" ", " this.data[i]['"+key+"'] ");
+				condition = condition.replace("`"+key+"`", "this.data[i]['"+key+"']");
 			});
 			if (eval(condition)) {
 				this.data.splice(i, 1);
@@ -87,7 +87,7 @@ class Table {
 			var condition = where;
 			var keys = Object.keys(this.data[i]);
 			keys.forEach(function(key) {
-				condition = condition.replace(" "+key+" ", " this.data[i]['"+key+"'] ");
+				condition = condition.replace("`"+key+"`", "this.data[i]['"+key+"']");
 			});
 			if (eval(condition)) {
 				var result = {};
@@ -105,9 +105,9 @@ class Table {
 var test = new Database();
 test.create_table('loghome', ['id', 'name']);
 test.insert({"id":"1", "name":"Bob"}, 'loghome');
-test.update({"id":"2", "name":"Tony"}, 'loghome', 'id == 1');
-// test.delete('loghome', 'id == 1');
-test2 = test.select(["id"], 'loghome', 'id == 2');
+test.update({"id":"2", "name":"Tony"}, 'loghome', '`id` == 1');
+// test.delete('loghome', '`id` == 1');
+test2 = test.select(["id"], 'loghome', '`id` == 2');
 console.log(test2);
 
 class Field {
