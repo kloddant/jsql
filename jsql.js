@@ -8,6 +8,26 @@ function subset(subarray, superarray) {
 	return subarray.reduce(function(o, k) { o[k] = superarray[k]; return o; }, {});
 }
 
+function transpose(array) {
+	var i = 0;
+	var dict = {};
+	for (i = 0; i < array.length; i++) {
+		for (var key in array[i]) {
+		   if (array[i].hasOwnProperty(key)) {
+		   		if (i == 0) {
+		   			dict[key] = [];
+		   		}
+		   		dict[key].push(array[i][key]);
+		   }
+		}
+	}
+	return dict;
+}
+
+function exit(error) {
+	throw new Error(error);
+}
+
 class Database {
 
 	constructor() {
@@ -34,25 +54,85 @@ class Database {
 		return table.select(fields, where);
 	}
 
-	create_table(name, fields) {
-		this.tables[name] = new Table(name, fields);
+	create_table(name, structure) {
+		this.tables[name] = new Table(name, structure);
 	}
 
 }
 
 class Table {
 
-	constructor(name, fields) {
+	constructor(name, structure) {
 		this.name = name;
-		this.fields = fields;
+		this.structure = structure;
 		this.data = [];
+		this.indices = {};
+	}
+
+	index() {
+		this.indices = transpose(this.data);
 	}
 
 	insert(json) {
 		this.data.push(json);
+		this.index();
 	}
 
 	update(fields, where) {
+		this.indexed_update(fields, where);
+	}
+
+	delete(where) {
+		this.indexed_delete(where);
+	}
+
+	select(fields, where) {
+		return this.indexed_select(fields, where);
+	}
+
+	indexed_update(fields, where) {
+		var i = 0;
+		for (i = 0; i < this.data.length; i++) {
+			var condition = where;
+			condition = condition.replace(/`(\w+)`/g, "this.indices['$1'][i]");
+			if (eval(condition)) {
+				Object.assign(this.data[i], fields);
+			}
+		}
+		this.index();
+	}
+
+	indexed_delete(where) {
+		var i = 0;
+		for (i = 0; i < this.data.length; i++) {
+			var condition = where;
+			condition = condition.replace(/`(\w+)`/g, "this.indices['$1'][i]");
+			if (eval(condition)) {
+				this.data.splice(i, 1);
+			}
+		}
+		this.index();
+	}
+
+	indexed_select(fields, where) {
+		var i = 0;
+		var results = [];
+		for (i = 0; i < this.data.length; i++) {
+			var condition = where;
+			condition = condition.replace(/`(\w+)`/g, "this.indices['$1'][i]");
+			if (eval(condition)) {
+				var sub = {};
+				var ii = 0;
+				for (ii = 0; ii < fields.length; ii++) {
+					sub[fields[ii]] = this.indices[fields[ii]][i];
+				}
+				results.push(sub);
+			}
+		}
+		return results;
+	}
+
+	full_scan_update(fields, where) {
 		var i = 0;
 		for (i = 0; i < this.data.length; i++) {
 			var condition = where;
@@ -64,9 +144,10 @@ class Table {
 				Object.assign(this.data[i], fields);
 			}
 		}
+		this.index();
 	}
 
-	delete(where) {
+	full_scan_delete(where) {
 		var i = 0;
 		for (i = 0; i < this.data.length; i++) {
 			var condition = where;
@@ -78,9 +159,10 @@ class Table {
 				this.data.splice(i, 1);
 			}
 		}
+		this.index();
 	}
 
-	select(fields, where) {
+	full_scan_select(fields, where) {
 		var i = 0;
 		var results = [];
 		for (i = 0; i < this.data.length; i++) {
@@ -90,7 +172,6 @@ class Table {
 				condition = condition.replace("`"+key+"`", "this.data[i]['"+key+"']");
 			});
 			if (eval(condition)) {
-				var result = {};
 				if (intersect(fields, keys)) {
 					var sub = subset(fields, this.data[i]);
 					results.push(sub);
