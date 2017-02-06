@@ -49,9 +49,19 @@ class Database {
 		table.delete(where);
 	}
 
-	select(fields, table, where) {
-		var table = this.tables[table];
-		return table.select(fields, where);
+	select(fields, tables, where) {
+		var i = 0;
+		var queryset = [];
+		for (i = 0; i < tables.length; i++) {
+			var name = tables[i]['name'];
+			var on = tables[i]['on'];
+			var table = this.tables[name];
+			var condition = on.replace(/`(\w+)`\.`(\w+)`/g, "this.tables['$1']['$2']");
+			if (eval(condition)) {
+				queryset = queryset.concat(table.select(fields, where));
+			}
+		}
+		return queryset;
 	}
 
 	create_table(name, structure) {
@@ -74,6 +84,19 @@ class Table {
 	}
 
 	insert(json) {
+		var keys = Object.keys(json);
+		var structure = this.structure;
+		var indices = this.indices;
+		keys.forEach(function(key) {
+			if (!structure[key].validate(json[key])) {
+				throw new Error("Error: Invalid data type.");
+			}
+			if (structure[key].unique) {
+				if (indices && indices.hasOwnProperty(key) && indices[key].indexOf(json[key]) > -1) {
+					throw new Error("Error: '"+key+"' field is unique.  Cannot add duplicate value "+json[key]);
+				}
+			}
+		});
 		this.data.push(json);
 		this.index();
 	}
@@ -183,18 +206,22 @@ class Table {
 
 }
 
-var test = new Database();
-test.create_table('loghome', ['id', 'name']);
-test.insert({"id":"1", "name":"Bob"}, 'loghome');
-test.update({"id":"2", "name":"Tony"}, 'loghome', '`id` == 1');
-// test.delete('loghome', '`id` == 1');
-test2 = test.select(["id"], 'loghome', '`id` == 2');
-console.log(test2);
-
 class Field {
 
-	constructor() {
+	constructor(max_length = false, unique=false) {
+		if (max_length) {
+			this.max_length = max_length;
+		} 
+		if (unique) {
+			this.unique = true;
+		}
+	}
 
+	validate(value) {
+		if (value.length > this.max_length) {
+			throw new Error("Error: '"+value+"' is greater than '"+this.max_length+"' characters.");
+		}
+		return true;
 	}
 
 }
@@ -202,15 +229,31 @@ class Field {
 class CharField extends Field {
 
 	constructor() {
+		super();
+	}
 
+	validate(value) {
+		super.validate(value);
+		if (typeof value !== 'string') {
+			throw new Error("Error: '"+value+"' is not a string.");
+		}
+		return true;
 	}
 
 }
 
 class IntegerField extends Field {
 
-	constructor() {
+	constructor(max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
+	}
 
+	validate(value) {
+		super.validate(value);
+		if (!Number.isInteger(value)) {
+			throw new Error("Error: '"+value+"' is not an integer.");
+		}
+		return true;
 	}
 
 }
@@ -218,7 +261,16 @@ class IntegerField extends Field {
 class EmailField extends CharField {
 
 	constructor() {
+		super();
+	}
 
+	validate(value) {
+		super.validate(value);
+		var re = /^.+@.+$/;
+		if (!re.test(value)) {
+			throw new Error("Error: '"+value+"' is not an email address.");
+		}
+		return true;
 	}
 
 }
@@ -226,7 +278,39 @@ class EmailField extends CharField {
 class UrlField extends CharField {
 
 	constructor() {
+		super();
+	}
 
+	validate(value) {
+		super.validate(value);
+		var re = /^https?:\/\/.+\..+$/;
+		if (!re.test(value)) {
+			throw new Error("Error: '"+value+"' is not a url.");
+		}
+		return true;
 	}
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+var test = new Database();
+test.create_table('test', {
+		'id': new IntegerField(max_length=false, unique=true),
+		'name': new CharField(),
+	}
+);
+test.insert({"id": 1, "name":"Bob"}, 'test');
+test.insert({"id": 1, "name":"Sam"}, 'test');
+test.update({"id": 2, "name":"Tony"}, 'test', '`id` == 1');
+test2 = test.select(["id"], [{'name':'test', 'on':'true'}], '`id` == 2');
+console.log(test2);
