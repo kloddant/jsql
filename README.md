@@ -11,7 +11,11 @@ A javascript, client-only MySQL database-equivalent framework for working with d
     
 ##CREATE TABLE
 
-    exampledatabase.create_table('exampletable', ['id', 'name']);
+    exampledatabase.create_table('exampletable', {
+        'id': new IntegerField(max_length=false, unique=true), 
+        'name': new CharField(),
+        }
+    );
 
 ##INSERT
 
@@ -27,8 +31,4 @@ A javascript, client-only MySQL database-equivalent framework for working with d
 
 ##SELECT
 
-    exampledatabase.select(["id"], 'exampletable', '`id` == 1');
-    
-##WHERE LIKE
-
-    exampledatabase.select(["id"], 'exampletable', '`id`.indexOf(1) > -1');
+    exampledatabase.select(["id"], [{'name':'exampletable', 'on':'true'}], '`id` == 1');
