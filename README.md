@@ -11,7 +11,7 @@ A javascript, client-only MySQL database-equivalent framework for working with d
     
 ##CREATE TABLE
 
-    exampledatabase.create_table('exampletable', {
+    exampledatabase.create_table(name='exampletable', structure={
         'id': new IntegerField(max_length=false, unique=true), 
         'name': new CharField(),
         }
@@ -19,16 +19,16 @@ A javascript, client-only MySQL database-equivalent framework for working with d
 
 ##INSERT
 
-    exampledatabase.insert({"id":"1", "name":"Bob"}, 'exampletable');
+    exampledatabase.insert(fields={"id":"1", "name":"Bob"}, table='exampletable');
 
 ##UPDATE
 
-    exampledatabase.update({"id":"2", "name":"Tony"}, 'exampletable', '`id` == 1');
+    exampledatabase.update(fields={"id":"2", "name":"Tony"}, table='exampletable', where='`id` == 1');
 
 ##DELETE
 
-    exampledatabase.delete('exampletable', '`id` == 1');
+    exampledatabase.delete(table='exampletable', where='`id` == 1');
 
 ##SELECT
 
-    exampledatabase.select(["id"], [{'name':'exampletable', 'on':'true'}], '`id` == 1');
+    exampledatabase.select(fields=["id"], tables=[{'name':'exampletable', 'on':'true'}], where='`id` == 1');
