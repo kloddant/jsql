@@ -32,21 +32,25 @@ class Database {
 
 	constructor() {
 		this.tables = {};
+		this.foreign_keys = [];
 	}
 
-	insert(json, table) {
+	insert(rows, table) {
 		var table = this.tables[table];
-		table.insert(json);
+		table.insert(rows);
+		this.verify_foreign_keys();
 	}
 
 	update(fields, table, where) {
 		var table = this.tables[table];
 		table.update(fields, where);
+		this.verify_foreign_keys();
 	}
 
 	delete(table, where) {
 		var table = this.tables[table];
 		table.delete(where);
+		this.verify_foreign_keys();
 	}
 
 	select(fields, tables, where) {
@@ -58,6 +62,7 @@ class Database {
 			var table = this.tables[name];
 			var condition = on.replace(/`(\w+)`\.`(\w+)`/g, "this.tables['$1']['$2']");
 			if (eval(condition)) {
+				// This needs work.  Should use Object.assign somewhere to combine the objects in each row.
 				queryset = queryset.concat(table.select(fields, where));
 			}
 		}
@@ -66,6 +71,25 @@ class Database {
 
 	create_table(name, structure) {
 		this.tables[name] = new Table(name, structure);
+		this.foreign_keys = this.foreign_keys.concat(this.tables[name].foreign_keys);
+	}
+
+	verify_foreign_keys() {
+		var i = 0;
+		var foreign_keys = this.foreign_keys;
+		var tables = this.tables;
+		for (i = 0; i < foreign_keys.length; i++) {
+			var foreign_key = foreign_keys[i];
+			var values = tables[foreign_key["table"]].indices[foreign_key["field"]];
+			if (!values) {
+				continue;
+			}
+			values.every(function(value) {
+				if (!tables.hasOwnProperty(foreign_key["target_table"]) || !tables[foreign_key["target_table"]].indices.hasOwnProperty(foreign_key["target_field"]) || tables[foreign_key["target_table"]].indices[foreign_key["target_field"]].indexOf(value) == -1) {
+					throw new Error("Foreign key constraint.  The field "+foreign_key["table"]+"."+foreign_key["field"]+" is linked to "+foreign_key["target_table"]+"."+foreign_key["target_field"]+".  This constraint is being violated where the former equals "+value+".  The latter contains no such value.");
+				}
+			});			
+		}
 	}
 
 }
@@ -77,28 +101,44 @@ class Table {
 		this.structure = structure;
 		this.data = [];
 		this.indices = {};
+		this.foreign_keys = [];
+		var self = this;
+		var keys = Object.keys(structure);
+		keys.forEach(function(key) {
+			if (structure[key].constructor.name == 'ForeignKeyField') {
+				var target = structure[key].target;
+				var target = target.replace('`.`', '`');
+				var target_table = target.split("`")[1];
+				var target_field = target.split("`")[2];
+				self.foreign_keys.push({"table": name, "field": key, "target_table": target_table, "target_field": target_field});
+			}
+		});
 	}
 
 	index() {
 		this.indices = transpose(this.data);
 	}
 
-	insert(json) {
-		var keys = Object.keys(json);
-		var structure = this.structure;
-		var indices = this.indices;
-		keys.forEach(function(key) {
-			if (!structure[key].validate(json[key])) {
-				throw new Error("Error: Invalid data type.");
-			}
-			if (structure[key].unique) {
-				if (indices && indices.hasOwnProperty(key) && indices[key].indexOf(json[key]) > -1) {
-					throw new Error("Error: '"+key+"' field is unique.  Cannot add duplicate value "+json[key]);
+	insert(rows) {
+		var i = 0;
+		for (i = 0; i < rows.length; i++) {
+			var json = rows[i];
+			var keys = Object.keys(json);
+			var structure = this.structure;
+			var indices = this.indices;
+			keys.forEach(function(key) {
+				if (!structure[key].validate(json[key])) {
+					throw new Error("Invalid data type.");
 				}
-			}
-		});
-		this.data.push(json);
-		this.index();
+				if (structure[key].unique) {
+					if (indices && indices.hasOwnProperty(key) && indices[key].indexOf(json[key]) > -1) {
+						throw new Error(key+"' field is unique.  Cannot add duplicate value "+json[key]);
+					}
+				}
+			});
+			this.data.push(json);
+			this.index();
+		}
 	}
 
 	update(fields, where) {
@@ -219,7 +259,7 @@ class Field {
 
 	validate(value) {
 		if (value.length > this.max_length) {
-			throw new Error("Error: '"+value+"' is greater than '"+this.max_length+"' characters.");
+			throw new Error(value+"' is greater than '"+this.max_length+"' characters.");
 		}
 		return true;
 	}
@@ -228,21 +268,34 @@ class Field {
 
 class CharField extends Field {
 
-	constructor() {
-		super();
+	constructor(max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
 	}
 
 	validate(value) {
 		super.validate(value);
 		if (typeof value !== 'string') {
-			throw new Error("Error: '"+value+"' is not a string.");
+			throw new Error(value+"' is not a string.");
 		}
 		return true;
 	}
 
 }
 
-class IntegerField extends Field {
+class FloatField extends Field {
+
+	constructor(max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
+	}
+
+	validate(value) {
+		super.validate(value);
+		return true;
+	}
+
+}
+
+class IntegerField extends FloatField {
 
 	constructor(max_length=false, unique=false) {
 		super(max_length=max_length, unique=unique);
@@ -251,7 +304,7 @@ class IntegerField extends Field {
 	validate(value) {
 		super.validate(value);
 		if (!Number.isInteger(value)) {
-			throw new Error("Error: '"+value+"' is not an integer.");
+			throw new Error(value+"' is not an integer.");
 		}
 		return true;
 	}
@@ -260,15 +313,15 @@ class IntegerField extends Field {
 
 class EmailField extends CharField {
 
-	constructor() {
-		super();
+	constructor(max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
 	}
 
 	validate(value) {
 		super.validate(value);
 		var re = /^.+@.+$/;
 		if (!re.test(value)) {
-			throw new Error("Error: '"+value+"' is not an email address.");
+			throw new Error(value+"' is not an email address.");
 		}
 		return true;
 	}
@@ -277,16 +330,121 @@ class EmailField extends CharField {
 
 class UrlField extends CharField {
 
-	constructor() {
-		super();
+	constructor(max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
 	}
 
 	validate(value) {
 		super.validate(value);
 		var re = /^https?:\/\/.+\..+$/;
 		if (!re.test(value)) {
-			throw new Error("Error: '"+value+"' is not a url.");
+			throw new Error(value+"' is not a url.");
 		}
+		return true;
+	}
+
+}
+
+class ForeignKeyField extends IntegerField {
+
+	constructor(target, max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
+		this.target = target;
+	}
+
+	validate(value) {
+		super.validate(value);
+		return true;
+	}
+
+}
+
+class BooleanField extends IntegerField {
+
+	constructor(max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
+	}
+
+	validate(value) {
+		super.validate(value);
+		return true;
+	}
+
+}
+
+class AutoField extends IntegerField {
+
+	constructor(max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
+	}
+
+	validate(value) {
+		super.validate(value);
+		return true;
+	}
+
+}
+
+class SlugField extends CharField {
+
+	constructor(max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
+	}
+
+	validate(value) {
+		super.validate(value);
+		return true;
+	}
+
+}
+
+class PositiveIntegerField extends IntegerField {
+
+	constructor(max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
+	}
+
+	validate(value) {
+		super.validate(value);
+		return true;
+	}
+
+}
+
+class DateTimeField extends Field {
+
+	constructor(max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
+	}
+
+	validate(value) {
+		super.validate(value);
+		return true;
+	}
+
+}
+
+class DecimalField extends FloatField {
+
+	constructor(max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
+	}
+
+	validate(value) {
+		super.validate(value);
+		return true;
+	}
+
+}
+
+class DateField extends Field {
+
+	constructor(max_length=false, unique=false) {
+		super(max_length=max_length, unique=unique);
+	}
+
+	validate(value) {
+		super.validate(value);
 		return true;
 	}
 
@@ -296,21 +454,20 @@ class UrlField extends CharField {
 
 
 
-
-
-
-
-
-
-
 var test = new Database();
-test.create_table('test', {
+test.create_table(name='test', structure={
 		'id': new IntegerField(max_length=false, unique=true),
 		'name': new CharField(),
+		'floorplan': new ForeignKeyField('`floorplan`.`id`'),
 	}
 );
-test.insert({"id": 1, "name":"Bob"}, 'test');
-test.insert({"id": 1, "name":"Sam"}, 'test');
-test.update({"id": 2, "name":"Tony"}, 'test', '`id` == 1');
-test2 = test.select(["id"], [{'name':'test', 'on':'true'}], '`id` == 2');
-console.log(test2);
+test.create_table(name='floorplan', structure={
+		'id': new IntegerField(max_length=false, unique=true),
+	}
+);
+test.insert(rows=[{"id": 1}], table='floorplan');
+test.insert(rows=[{"id": 1, "name":"Bob"}], table='test');
+test.insert(rows=[{"id": 3, "name":"Sam"}], table='test');
+test.update(fields={"id": 2, "name":"Tony", "floorplan": 2}, table='test', where='`id` == 1');
+test2 = test.select(fields=["id"], tables=[{'name':'test', 'on':'true'}], where='`id` == 2');
+// console.log(test2);
