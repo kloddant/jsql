@@ -14,7 +14,7 @@ function transpose(array) {
 	for (i = 0; i < array.length; i++) {
 		for (var key in array[i]) {
 		   if (array[i].hasOwnProperty(key)) {
-		   		if (i == 0) {
+		   		if (!dict.hasOwnProperty(key)) {
 		   			dict[key] = [];
 		   		}
 		   		dict[key].push(array[i][key]);
@@ -125,6 +125,7 @@ class Table {
 			var json = rows[i];
 			var keys = Object.keys(json);
 			var structure = this.structure;
+			var structure_keys = Object.keys(structure);
 			var indices = this.indices;
 			keys.forEach(function(key) {
 				if (!structure[key].validate(json[key])) {
@@ -134,6 +135,24 @@ class Table {
 					if (indices && indices.hasOwnProperty(key) && indices[key].indexOf(json[key]) > -1) {
 						throw new Error(key+"' field is unique.  Cannot add duplicate value "+json[key]);
 					}
+				}
+			});
+			structure_keys.forEach(function(key) {
+				if (structure[key].constructor.name == 'AutoField' && !json.hasOwnProperty(key)) {
+					var values = indices[key];
+					values.push(structure[key].counter);
+					var next = Math.max.apply(Math, values) + 1;
+					json[key] = next;
+					structure[key].counter = next;
+				}
+				if (!json.hasOwnProperty(key) && structure[key].defaul) {
+					json[key] = structure[key].defaul;
+				}
+				else if (!json.hasOwnProperty(key) && structure[key].blank) {
+					json[key] = null;
+				}
+				else if (!json.hasOwnProperty(key) && !structure[key].blank && !structure[key].defaul) {
+					throw new Error(key+" is a required field.");
 				}
 			});
 			this.data.push(json);
@@ -248,12 +267,21 @@ class Table {
 
 class Field {
 
-	constructor(max_length = false, unique=false) {
+	constructor(max_length = false, unique=false, blank=true, defaul=false) {
 		if (max_length) {
 			this.max_length = max_length;
 		} 
 		if (unique) {
 			this.unique = true;
+		}
+		if (blank) {
+			this.blank = true;
+		}
+		if (defaul) {
+			this.defaul = defaul;
+		}
+		if (!this.defaul && !this.blank) {
+			throw new Error("Required fields must have a default value.");
 		}
 	}
 
@@ -367,6 +395,9 @@ class BooleanField extends IntegerField {
 
 	validate(value) {
 		super.validate(value);
+		if (typeof value !== 'boolean') {
+			throw new Error(value+" is not a boolean.");
+		}
 		return true;
 	}
 
@@ -376,6 +407,7 @@ class AutoField extends IntegerField {
 
 	constructor(max_length=false, unique=false) {
 		super(max_length=max_length, unique=unique);
+		this.counter = 0;
 	}
 
 	validate(value) {
@@ -393,6 +425,10 @@ class SlugField extends CharField {
 
 	validate(value) {
 		super.validate(value);
+		var re = /^[\w\d_-]*$/;
+		if (!re.test(value)) {
+			throw new Error(value+"' is not a slug.");
+		}
 		return true;
 	}
 
@@ -406,6 +442,9 @@ class PositiveIntegerField extends IntegerField {
 
 	validate(value) {
 		super.validate(value);
+		if (value < 0) {
+			throw new Error(value+" is not positive.");
+		}
 		return true;
 	}
 
@@ -419,6 +458,9 @@ class DateTimeField extends Field {
 
 	validate(value) {
 		super.validate(value);
+		if (!value instanceof Date) {
+			throw new Exception(value+" is not a datetime.");
+		}
 		return true;
 	}
 
@@ -432,42 +474,30 @@ class DecimalField extends FloatField {
 
 	validate(value) {
 		super.validate(value);
+		var num = float(value.toFixed(2));
+		if (value !== num) {
+			throw new Error(value+" is not a decimal.");
+		}
 		return true;
 	}
 
 }
-
-class DateField extends Field {
-
-	constructor(max_length=false, unique=false) {
-		super(max_length=max_length, unique=unique);
-	}
-
-	validate(value) {
-		super.validate(value);
-		return true;
-	}
-
-}
-
-
 
 
 
 var test = new Database();
 test.create_table(name='test', structure={
-		'id': new IntegerField(max_length=false, unique=true),
+		'id': new AutoField(max_length=false, unique=true),
 		'name': new CharField(),
-		'floorplan': new ForeignKeyField('`floorplan`.`id`'),
 	}
 );
 test.create_table(name='floorplan', structure={
 		'id': new IntegerField(max_length=false, unique=true),
 	}
 );
-test.insert(rows=[{"id": 1}], table='floorplan');
-test.insert(rows=[{"id": 1, "name":"Bob"}], table='test');
-test.insert(rows=[{"id": 3, "name":"Sam"}], table='test');
-test.update(fields={"id": 2, "name":"Tony", "floorplan": 2}, table='test', where='`id` == 1');
-test2 = test.select(fields=["id"], tables=[{'name':'test', 'on':'true'}], where='`id` == 2');
-// console.log(test2);
+test.insert(rows=[{"id": 0}], table='test');
+test.insert(rows=[{"name":"Bob"}], table='test');
+test.insert(rows=[{"name":"Sam"}], table='test');
+// test.update(fields={"name":"Tony", "floorplan": 1}, table='test', where='`id` == 1');
+test2 = test.select(fields=["id", "name"], tables=[{'name':'test', 'on':'true'}], where='true');
+console.log(test2);
